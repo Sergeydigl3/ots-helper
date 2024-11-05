@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Решетчатая диаграмма сверточного кода</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(135deg, #5A2C91, #3E1A60);
+            margin: 0;
+            padding: 20px;
+            color: #fff;
+        }
+        h2 {
+            color: #E0D5E9;
+            text-align: center;
+        }
+        .input-container {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+            padding: 20px;
+            margin: 0 auto 20px auto;
+            max-width: 400px;
+            text-align: center;
+        }
+        #matrixInput {
+            width: 100%;
+            height: 100px;
+            font-size: 16px;
+            padding: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            border-radius: 4px;
+            resize: none;
+            box-shadow: inset 0 1px 3px rgba(255, 255, 255, 0.2);
+            background: rgba(255, 255, 255, 0.2);
+            color: #fff;
+        }
+        #generateButton {
+            padding: 10px 15px;
+            font-size: 16px;
+            background-color: #6F3C99;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+        #generateButton:hover {
+            background-color: #8E54B2;
+        }
+        svg {
+            display: block;
+            margin: 20px auto;
+            width: 100%; /* Заменяем max-width на width */
+            height: auto; /* Высота автоматически */
+            background-color: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+        }
+        .node circle {
+            fill: lightblue;
+            stroke: #5A2C91;
+            stroke-width: 3px;
+        }
+        .node text {
+            font: 10px sans-serif;
+            fill: #fff;
+        }
+        .link {
+            fill: none;
+            stroke: #FF6F61;
+            stroke-width: 2px;
+        }
+    </style>
+</head>
+<body>
+    <div class="input-container">
+        <h2>Введите матрицу hT</h2>
+        <textarea id="matrixInput" placeholder="Введите значения матрицы G без пробелов и знаков, например:&#10;110&#10;101&#10;011&#10;100&#10;010&#10;001"></textarea>
+        <br>
+        <button id="generateButton">Сгенерировать диаграммы</button>
+    </div>
+
+    <h2>Полная решётчатая диаграмма</h2>
+    <svg id="fullTrellis" viewBox="0 0 800 400" preserveAspectRatio="xMinYMin meet"></svg>
+
+    <h2>Все пути к конечному состоянию `000`</h2>
+    <svg id="pathsToEnd" viewBox="0 0 800 400" preserveAspectRatio="xMinYMin meet"></svg>
+
+    <script>
+        const constraint_length = 4;
+        const memory_order = constraint_length - 1;
+        const n_states = 2 ** memory_order;
+
+        document.getElementById('generateButton').onclick = function() {
+            const input = document.getElementById('matrixInput').value.trim();
+            const rows = input.split('\n').map(row => row.split('').map(Number));
+
+            const G_trellis = { nodes: [], links: [] };
+            const initial_state = 0;
+            G_trellis.nodes.push({ time: 0, state: initial_state });
+
+            for (let t = 0; t < rows.length; t++) {
+                for (let state = 0; state < n_states; state++) {
+                    if (!G_trellis.nodes.some(n => n.time === t && n.state === state)) {
+                        continue;
+                    }
+                    for (let input_bit of [0, 1]) {
+                        let new_state = state;
+                        if (input_bit === 1) {
+                            const g_row = rows[t];
+                            const x_value = parseInt(g_row.join(''), 2);
+                            new_state = state ^ x_value;
+                        }
+
+                        G_trellis.nodes.push({ time: t + 1, state: new_state });
+                        G_trellis.links.push({
+                            source: { time: t, state: state },
+                            target: { time: t + 1, state: new_state },
+                            label: `${input_bit} -> (${t + 1}, ${new_state})`
+                        });
+                    }
+                }
+            }
+
+            const last_time = Math.max(...G_trellis.nodes.map(node => node.time));
+            const targetPoint = { time: last_time, state: 0 };
+
+            function renderGraph(svgId, graph) {
+                const svg = d3.select(svgId);
+                const g = svg.append("g").attr("transform", "translate(0, 0)");
+
+                const link = g.selectAll(".link")
+                    .data(graph.links)
+                    .enter().append("line")
+                    .attr("class", "link")
+                    .attr("x1", d => (d.source.time * 100) + 50)
+                    .attr("y1", d => (d.source.state) * 40 + 20)
+                    .attr("x2", d => (d.target.time * 100) + 50)
+                    .attr("y2", d => (d.target.state) * 40 + 20);
+
+                const node = g.selectAll(".node")
+                    .data(graph.nodes)
+                    .enter().append("g")
+                    .attr("class", "node")
+                    .attr("transform", d => `translate(${d.time * 100 + 50},${d.state * 40 + 20})`);
+
+                node.append("circle").attr("r", 10);
+                node.append("text")
+                    .attr("dy", ".35em")
+                    .attr("text-anchor", "middle")
+                    .attr("fill", "black")
+                    .style("fill", "black")
+                    .text(d => `(${d.time}, ${d.state})`);
+            }
+
+            d3.select("#fullTrellis").selectAll("*").remove();
+            renderGraph("#fullTrellis", G_trellis);
+
+            const G_paths = { nodes: [], links: [] };
+
+            function findAllPathsToTarget(current) {
+                G_trellis.links.filter(link => 
+                    link.target.time === current.time && link.target.state === current.state
+                ).forEach(link => {
+                    G_paths.links.push(link);
+                    G_paths.nodes.push(link.source, link.target);
+                    findAllPathsToTarget(link.source);
+                });
+            }
+
+            findAllPathsToTarget(targetPoint);
+            G_paths.nodes = Array.from(new Set(G_paths.nodes.map(n => JSON.stringify(n)))).map(n => JSON.parse(n));
+
+            d3.select("#pathsToEnd").selectAll("*").remove();
+            renderGraph("#pathsToEnd", G_paths);
+        };
+    </script>
+</body>
+</html>
