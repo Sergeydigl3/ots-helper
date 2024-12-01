@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Таблицы экспоненты и логарифма в конечном поле</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #2c3e50;
+            color: #ecf0f1;
+        }
+        
+        h1 {
+            text-align: center;
+            color: #4a90e2;
+        }
+
+        label {
+            display: block;
+            margin-top: 10px;
+            font-weight: bold;
+        }
+
+        input, button {
+            display: block;
+            width: 100%;
+            max-width: 300px;
+            margin: 10px auto;
+            padding: 10px;
+            font-size: 16px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+        }
+
+        button {
+            background-color: #4a90e2;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #357ab8;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            background-color: #34495e;
+            color: #ecf0f1;
+        }
+
+        th, td {
+            border: 1px solid #555;
+            padding: 10px;
+            text-align: center;
+        }
+
+        th {
+            background-color: #4a90e2;
+        }
+
+        tr:nth-child(even) {
+            background-color: #3b4b59;
+        }
+
+        .result {
+            margin-top: 20px;
+        }
+
+        .table-container {
+            margin-top: 40px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Таблицы конечного поля GF(2^3)</h1>
+
+    <label for="poly">Введите порождающий полином (в двоичном виде):</label>
+    <input id="poly" type="text" value="1101">
+
+    <label for="fieldSize">Размер поля (степень GF(2)): </label>
+    <input id="fieldSize" type="number" value="3">
+
+    <button onclick="generateTable()">Построить таблицу</button>
+
+    <div id="result" class="result"></div>
+
+    <div id="tableResult" class="table-container"></div>
+
+    <script>
+        function toPolynomial(value) {
+            const binary = value.toString(2);  // Преобразуем число в двоичную строку
+            const terms = [];
+
+            for (let i = 0; i < binary.length; i++) {  // Итерируем от старшего бита к младшему
+                if (binary[i] === '1') {
+                    const power = binary.length - i - 1;  // Степень, начиная с самой старшей
+                    let term = power > 0 ? `x^${power}` : '1';
+                    if (power === 1) term = 'x';
+                    terms.push(term);
+                }
+            }
+
+            return terms.length ? terms.join(' + ') : '0';  // Если термины есть, соединяем их через " + "
+        }
+
+        function multiplyByX(value, poly, mask) {
+            let result = value << 1;
+            if (result & (1 << mask.toString(2).length)) {
+                result ^= poly;
+            }
+            return result & mask;
+        }
+
+        function generateTable() {
+            const polyInput = document.getElementById('poly').value;
+            const fieldSizeInput = parseInt(document.getElementById('fieldSize').value);
+
+            const poly = parseInt(polyInput, 2);
+            const fieldSize = 1 << fieldSizeInput; // 2^fieldSizeInput
+            const mask = (1 << fieldSizeInput) - 1;
+
+            const table = [];
+            table.push({ degree_repr: 0, value: 0, bin_repr: '0'.repeat(fieldSizeInput) });
+            table.push({ degree_repr: 1, value: 1, bin_repr: '1'.padStart(fieldSizeInput, '0') });
+
+            let value = 1;
+            for (let i = 1; i < fieldSize - 1; i++) {
+                value = multiplyByX(value, poly, mask);
+                const degree_repr = table[table.length - 1].degree_repr << 1;
+                table.push({
+                    degree_repr: degree_repr,
+                    value: value,
+                    bin_repr: value.toString(2).padStart(fieldSizeInput, '0')
+                });
+            }
+
+            const expTable = new Array(fieldSize).fill(0);
+            const logTable = new Array(fieldSize).fill(null);
+
+            for (let k = 0; k < fieldSize - 1; k++) {
+                const element = table.find(el => el.degree_repr === (1 << k));
+                if (element) {
+                    expTable[k] = element.value;
+                    logTable[element.value] = k;
+                }
+            }
+
+            displayMainTable(table);
+            displayExpLogTable(expTable, logTable);
+        }
+
+        function displayMainTable(table) {
+            const tableDiv = document.getElementById('tableResult');
+            tableDiv.innerHTML = '<h2>Таблица значений</h2>';
+
+            const mainTable = document.createElement('table');
+            const headerRow = document.createElement('tr');
+            ['Степенное представление', 'Полиномическое представление', 'Двоичное представление', 'Десятичное значение'].forEach(text => {
+                const th = document.createElement('th');
+                th.textContent = text;
+                headerRow.appendChild(th);
+            });
+            mainTable.appendChild(headerRow);
+
+            table.forEach(el => {
+                const tr = document.createElement('tr');
+                const degreeCell = document.createElement('td');
+                degreeCell.textContent = toPolynomial(el.degree_repr, 3);
+                const polyCell = document.createElement('td');
+                polyCell.textContent = toPolynomial(el.value, 3);
+                const binCell = document.createElement('td');
+                binCell.textContent = el.bin_repr;
+                const valueCell = document.createElement('td');
+                valueCell.textContent = el.value;
+
+                tr.appendChild(degreeCell);
+                tr.appendChild(polyCell);
+                tr.appendChild(binCell);
+                tr.appendChild(valueCell);
+                mainTable.appendChild(tr);
+            });
+
+            tableDiv.appendChild(mainTable);
+        }
+
+        function displayExpLogTable(expTable, logTable) {
+            const tableDiv = document.getElementById('tableResult');
+            tableDiv.innerHTML += '<h2>Таблица экспоненциального и логарифмического представления</h2>';
+
+            const expLogTable = document.createElement('table');
+            const headerRow = document.createElement('tr');
+            ['k', 'Exp(k)', 'a', 'Log(a)'].forEach(text => {
+                const th = document.createElement('th');
+                th.textContent = text;
+                headerRow.appendChild(th);
+            });
+            expLogTable.appendChild(headerRow);
+
+            for (let k = 0; k < expTable.length; k++) {
+                const tr = document.createElement('tr');
+                const kCell = document.createElement('td');
+                kCell.textContent = k;
+                const expCell = document.createElement('td');
+                expCell.textContent = expTable[k] !== 0 ? expTable[k] : 1;
+                const aCell = document.createElement('td');
+                aCell.textContent = k;
+                const logCell = document.createElement('td');
+                logCell.textContent = logTable[k] !== null ? logTable[k] : '-Inf';
+
+                tr.appendChild(kCell);
+                tr.appendChild(expCell);
+                tr.appendChild(aCell);
+                tr.appendChild(logCell);
+                expLogTable.appendChild(tr);
+            }
+
+            tableDiv.appendChild(expLogTable);
+        }
+    </script>
+</body>
+</html>

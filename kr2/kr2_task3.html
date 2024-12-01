@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Brython BCH Decoder</title>
+    <script src="https://cdn.jsdelivr.net/npm/brython@3.11.2/brython.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/brython@3.11.2/brython_stdlib.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #2c3e50;
+            color: #ecf0f1;
+        }
+
+        h1 {
+            text-align: center;
+            color: #4a90e2;
+        }
+
+        label {
+            display: block;
+            margin-top: 10px;
+            font-weight: bold;
+        }
+
+        input, button {
+            display: block;
+            width: 100%;
+            max-width: 400px; /* Increased width for sequence input */
+            margin: 10px auto;
+            padding: 10px;
+            font-size: 16px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+        }
+
+        button {
+            background-color: #4a90e2;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #357ab8;
+        }
+        
+        #result {
+            background-color: #34495e;
+            color: #ecf0f1;
+            padding: 10px;
+            margin-top: 20px;
+            border-radius: 5px;
+            white-space: pre-wrap; /* added for proper formatting */
+        }
+    </style>
+</head>
+<body onload="brython()">
+
+<h1>Brython BCH Decoder</h1>
+
+<label for="sequence">Введите принятую последовательность (например, 010001011100110):</label>
+<input type="text" id="sequence" value="010001011100110">
+
+<button id="decode-button">Рассчитать</button> <div id="result"></div>
+
+<div id="result"></div>
+
+<script type="text/python">
+from browser import document, html
+
+# task3
+# Таблицы для GF(2^4)
+exp_table = [1, 2, 4, 8, 3, 6, 12, 11, 5, 10, 7, 14, 15, 13, 9, 1]
+log_table = [0, 0, 1, 4, 2, 8, 5, 10, 3, 14, 9, 7, 6, 13, 11, 12]
+
+def gf_add(a, b):
+    return a ^ b
+
+def gf_mul(a, b):
+    if a == 0 or b == 0:
+        return 0
+    return exp_table[(log_table[a] + log_table[b]) % 15]
+
+def gf_div(a, b):
+    if a == 0:
+        return 0
+    if b == 0:
+        raise ZeroDivisionError("Division by zero in GF(2^4)")
+    return exp_table[(log_table[a] - log_table[b]) % 15]
+
+# Принятая последовательность
+v = [0, 1, 0, 0, 0, 1, 0, 1, 1, 1, 0, 0, 1, 1, 0]
+
+def calculate_syndromes(v):
+    syndromes = []
+    output = html.DIV()
+    output <= html.P("\n1) Вычисление синдромов:")
+    for i in range(1, 5):
+        s = 0
+        terms = []
+        for j in range(len(v)):
+            if v[j] != 0:
+                term = gf_mul(v[j], exp_table[(i * j) % 15])
+                terms.append(f"a^{(i * j) % 15}")
+                s = gf_add(s, term)
+        syndrome_exp = f"a^{log_table[s]}" if s != 0 else "0"
+        output <= html.P(f"S{i} = v(a^{i}) = {' + '.join(terms)} = {syndrome_exp}")
+        syndromes.append(s)
+    document <= output
+    return syndromes
+
+
+def berlekamp_massey(syndromes):
+    output = html.DIV()
+    output <= html.P("\n2) Многочлен локаторов ошибок:")
+    n = len(syndromes)
+    λ = [1]
+    B = [1]
+    L = 0
+    m = 1
+    b = 1
+
+    for i in range(n):
+        discr = syndromes[i]
+        for j in range(1, L + 1):
+            term = gf_mul(λ[j], syndromes[i - j])
+            discr = gf_add(discr, term)
+        
+        if discr == 0:
+            m += 1
+        else:
+            T = λ[:]
+            factor = gf_div(discr, b)
+            for j in range(len(B)):
+                if j + m < len(λ):
+                    λ[j + m] = gf_add(λ[j + m], gf_mul(factor, B[j]))
+                else:
+                    λ.append(gf_mul(factor, B[j]))
+
+            if 2 * L <= i:
+                L = i + 1 - L
+                B = T
+                b = discr
+                m = 1
+            else:
+                m += 1
+
+    for i, coef in enumerate(λ):
+        coef_exp = f"a^{log_table[coef]}" if coef != 0 else "0"
+        output <= html.P(f"λ{i} = {coef:04b} = {coef_exp}")
+    document <= output
+    return λ
+
+def find_error_positions(λ):
+    output = html.DIV()
+    output <= html.P("\n3) Проверка корней многочлена λ(x):")
+    positions = []
+
+    str_elements = []
+    str_result = "1"
+    for i in range(1, len(λ)):
+        if λ[i] != 0:
+            λ_exp = f"a^{log_table[λ[i]]}" if λ[i] != 1 else "1"
+            x_str = f"x^{i}"
+            if i == 1:
+                x_str = "x"
+            str_elements.append(f"{λ_exp} * {x_str}")
+    str_result += " + " + " + ".join(str_elements)
+    output <= html.P(f"λ(x) = 1 + λ1 * x + λ2 * x^2 = {str_result}")
+
+    for i in range(15):
+        x = exp_table[i]
+        result = 0
+        terms = []
+        detailed_terms = []
+        for j in range(len(λ)):
+            term = gf_mul(λ[j], exp_table[(i * j) % 15])
+            result = gf_add(result, term)
+            terms.append(f"λ{j}*a^{(i*j)%15}")
+            if λ[j] != 0:
+                λ_exp = f"a^{(log_table[λ[j]] + (i*j) % 15) % 15}" if λ[j] != 1 else "1"
+                detailed_terms.append(f"{λ_exp}")
+            else:
+                detailed_terms.append("0")
+
+        result_exp = f"a^{log_table[result]}" if result != 0 else "0"
+        output <= html.P(f"λ(a^{i}) = {' + '.join(terms)} = {' + '.join(detailed_terms)} = {result_exp}")
+        if result == 0:
+            output <= html.P(f"Корень найден: r = a^{i}")
+            positions.append(exp_table[(15 - i) % 15])
+
+    document <= output
+    return positions
+
+def find_roots_from_locators(locators):
+    roots = [gf_div(1, loc) for loc in locators]
+    return roots
+
+
+
+def main(v): # Modified main function to accept 'v'
+    document <= html.P("1) Принятая последовательность v(x):")
+    document <= html.P("v(x) =", "".join(map(str, v)))
+
+    syndromes = calculate_syndromes(v)
+    λ = berlekamp_massey(syndromes)
+    error_locators = find_error_positions(λ)
+
+
+    error_roots = find_roots_from_locators(error_locators)
+    output = html.DIV()
+    output <= html.P("\n3) Корни многочлена Lambda(x):")
+    for i, root in enumerate(error_roots):
+        output <= html.P(f"r{i+1} = {root:04b} = a^{log_table[root]}")
+    document <= output
+
+    output = html.DIV()
+    output <= html.P("\n4) Локаторы ошибок:")
+    for i, loc in enumerate(error_locators):
+        output <= html.P(f"X{i+1} = {loc:04b} = a^{log_table[loc]}")
+    document <= output
+
+
+    error_positions = [log_table[x] for x in error_locators]
+    output = html.DIV()
+    output <= html.P("\n5) Позиции ошибок:")
+    for i, pos in enumerate(error_positions):
+        output <= html.P(f"i{i+1} = Log(X{i+1}) = {pos}")
+    document <= output
+
+def decode(event): #  Added event argument
+    sequence_str = document["sequence"].value
+    try:
+        v = [int(bit) for bit in sequence_str]
+        if len(v) != 15:
+            document["result"].clear()
+            document["result"] <= html.P("Ошибка: Последовательность должна содержать 15 бит.")
+        else:
+            document["result"].clear()
+            main(v)
+    except ValueError:
+        document["result"].clear()
+        document["result"] <= html.P("Ошибка: Введите последовательность, состоящую только из 0 и 1.")
+
+document["decode-button"].bind("click", decode) # Binding to the button element
+</script>
+
+</body>
+</html>
