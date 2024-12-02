@@ -3,9 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Калькулятор GF(2^3)</title>
+    <title>Калькулятор GF(2^n)</title>
     <style>
-        /* Стили остаются без изменений */
         body {
             font-family: Arial, sans-serif;
             margin: 0;
@@ -13,7 +12,7 @@
             background-color: #2c3e50;
             color: #ecf0f1;
         }
-
+        
         h1 {
             text-align: center;
             color: #4a90e2;
@@ -47,8 +46,34 @@
             background-color: #357ab8;
         }
 
-        .result, .table-container {
+        table {
+            width: 100%;
+            border-collapse: collapse;
             margin-top: 20px;
+            background-color: #34495e;
+            color: #ecf0f1;
+        }
+
+        th, td {
+            border: 1px solid #555;
+            padding: 10px;
+            text-align: center;
+        }
+
+        th {
+            background-color: #4a90e2;
+        }
+
+        tr:nth-child(even) {
+            background-color: #3b4b59;
+        }
+
+        .result {
+            margin-top: 20px;
+        }
+
+        .table-container {
+            margin-top: 40px;
         }
 
         pre {
@@ -60,18 +85,18 @@
 
         .example {
             margin-top: 10px;
-            font-size: 14px;
+            font-size: 20px;
             color: #b0c4de;
         }
     </style>
 </head>
 <body>
-    <h1>Таблицы конечного поля GF(2^3)</h1>
+    <h1>Таблицы конечного поля GF(2^n)</h1>
 
     <label for="poly">Введите порождающий полином (в двоичном виде):</label>
     <input id="poly" type="text" value="1101">
 
-    <label for="fieldSize">Размер поля (степень GF(2)): </label>
+    <label for="fieldSize">Размер поля (степень GF(2^n)): </label>
     <input id="fieldSize" type="number" value="3">
 
     <label for="coefficients">Введите коэффициенты многочлена λ(x):</label>
@@ -88,26 +113,26 @@
     <div id="tableResult" class="table-container"></div>
 
     <script>
-        function gfMult(a, b, modPoly) {
+        function gfMult(a, b, modPoly, fieldSize) {
             let result = 0;
             while (b) {
                 if (b & 1) result ^= a;
                 b >>= 1;
                 a <<= 1;
-                if (a & (1 << 3)) a ^= modPoly;
+                if (a & (1 << fieldSize)) a ^= modPoly; // Проверка переполнения степени
             }
             return result;
-        }
-
-        function binChiling(x, length = 3) {
-            return x.toString(2).padStart(length, '0');
         }
 
         function findInTable(x, currTable) {
             return currTable.indexOf(x);
         }
 
-        function korocheLambda(x, modPoly, lambdaCoeffs, index, fullTable) {
+        function binChiling(x, length) {
+            return x.toString(2).padStart(length, '0');
+        }
+
+        function korocheLambda(x, modPoly, lambdaCoeffs, index, fullTable, fieldSize) {
             let gfMultRes = [];
             let tmpX = 1;
             let predRes = [];
@@ -117,66 +142,95 @@
             for (let i = 0; i < lambdaCoeffs.length; i++) {
                 const pow1 = findInTable(tmpX, fullTable);
                 const pow2 = findInTable(lambdaCoeffs[i], fullTable);
-                const tmpRes = gfMult(tmpX, lambdaCoeffs[i], modPoly);
+                const tmpRes = gfMult(tmpX, lambdaCoeffs[i], modPoly, fieldSize);
 
-                // Строки для представления формулы
                 let tmpArr = [];
                 let tmpMachine = [];
-
                 if (pow1 !== 0) {
                     tmpArr.push(`a^${pow1}`);
-                    tmpMachine.push(binChiling(tmpX));
+                    tmpMachine.push(binChiling(tmpX, fieldSize));
                 }
                 if (pow2 !== 0) {
                     tmpArr.push(`a^${pow2}`);
-                    tmpMachine.push(binChiling(lambdaCoeffs[i]));
+                    tmpMachine.push(binChiling(lambdaCoeffs[i], fieldSize));
                 }
-
-                // Формируем строку умножения
-                let tmpProd = tmpArr.join(' * ');
-                let tmpProdMachine = tmpMachine.join(' * ');
-
-                // Если есть умножение, оборачиваем в скобки
-                if (tmpArr.length > 1) {
-                    tmpProd = `(${tmpProd})`;
-                    tmpProdMachine = `(${tmpProdMachine})`;
-                }
-
-                // Если массив пуст, это означает, что элемент равен 1
-                if (tmpProd.length === 0) {
+                let tmpProd = tmpArr.length > 1 ? `(${tmpArr.join(" * ")})` : tmpArr.join("");
+                let tmpProdMachine = tmpMachine.length > 1 ? `(${tmpMachine.join(" * ")})` : tmpMachine.join("");
+                
+                if (tmpProd.length == 0){
                     tmpProd = "1";
-                    tmpProdMachine = "001";
+                    tmpProdMachine = binChiling(1, fieldSize);
                 }
 
-                // Добавляем строку в результат
-                if (pow1 !== 7 && pow2 !== 7) {
+                let zero_in_end = fullTable.length-1
+                if (pow1 !== zero_in_end && pow2 !== zero_in_end) {
                     predRes.push(tmpProd);
                     machineRes.push(tmpProdMachine);
                 }
 
                 gfMultRes.push(tmpRes);
-                tmpX = gfMult(tmpX, x, modPoly);
+                tmpX = gfMult(tmpX, x, modPoly, fieldSize);
             }
 
             const result = gfMultRes.reduce((acc, val) => acc ^ val, 0);
+            const predResStr = predRes.reverse().join(" + ");
+            const machineResStr = machineRes.reverse().join(" + ");
+            log += `λ(a^${index}) = ${predResStr} = ${machineResStr} = ${binChiling(result, fieldSize)}\n`;
 
-            // Обратный порядок для правильного сложения
-            const predResStr = predRes.reverse().join(' + ') || '1';
-            const machineResStr = machineRes.reverse().join(' + ') || '001';
-
-            log += `λ(a^${index}) = ${predResStr} = ${machineResStr} = 0b${binChiling(result)}\n`;
             return { result, log };
         }
 
-        function findRoots(table, modPoly, lambdaCoeffs) {
+        function findRoots(table, modPoly, lambdaCoeffs, fieldSize) {
             let roots = [];
-            let log = '';
-            for (let x = 0; x < table.length - 1; x++) {
-                const { result, log: currLog } = korocheLambda(table[x], modPoly, lambdaCoeffs, x, table);
-                log += currLog;
+            let resultLog = '';
+            for (let x = 0; x < (1 << fieldSize) - 1; x++) {
+                const element = table[x];
+                const { result, log } = korocheLambda(element, modPoly, lambdaCoeffs, x, table, fieldSize);
+                resultLog += log;
                 if (result === 0) roots.push(x);
             }
-            return { roots, log };
+            return { roots, log: resultLog };
+        }
+
+        function generateTable() {
+            const polyInput = document.getElementById('poly').value;
+            const fieldSizeInput = parseInt(document.getElementById('fieldSize').value);
+
+            const poly = parseInt(polyInput, 2);
+            const mask = (1 << fieldSizeInput) - 1;
+
+            const table = [];
+            let value = 1;
+            for (let i = 0; i < (1 << fieldSizeInput) - 1; i++) {
+                table.push(value);
+                value = gfMult(value, 2, poly, fieldSizeInput) & mask;
+            }
+
+            displayMainTable(table);
+        }
+
+        function displayMainTable(table) {
+            const tableDiv = document.getElementById('tableResult');
+            tableDiv.innerHTML = '<h2>Таблица значений</h2>';
+
+            const mainTable = document.createElement('table');
+            const headerRow = document.createElement('tr');
+            ['Десятичное значение'].forEach(text => {
+                const th = document.createElement('th');
+                th.textContent = text;
+                headerRow.appendChild(th);
+            });
+            mainTable.appendChild(headerRow);
+
+            table.forEach(el => {
+                const tr = document.createElement('tr');
+                const valueCell = document.createElement('td');
+                valueCell.textContent = el;
+                tr.appendChild(valueCell);
+                mainTable.appendChild(tr);
+            });
+
+            tableDiv.appendChild(mainTable);
         }
 
         function displayPolynomialRoots() {
@@ -191,12 +245,12 @@
             let value = 1;
             for (let i = 0; i < (1 << fieldSizeInput) - 1; i++) {
                 table.push(value);
-                value = gfMult(value, 2, poly) & mask;
+                value = gfMult(value, 2, poly, fieldSizeInput) & mask;
             }
             table.push(0);
 
             const lambdaCoeffs = coefficientsInput.map(index => table[index]);
-            const { roots, log } = findRoots(table, poly, lambdaCoeffs);
+            const { roots, log } = findRoots(table, poly, lambdaCoeffs, fieldSizeInput);
 
             const resultDiv = document.getElementById('result');
             resultDiv.innerHTML = `
