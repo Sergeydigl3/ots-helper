@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Калькулятор GF(2^3)</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #2c3e50;
+            color: #ecf0f1;
+        }
+        
+        h1 {
+            text-align: center;
+            color: #4a90e2;
+        }
+
+        label {
+            display: block;
+            margin-top: 10px;
+            font-weight: bold;
+        }
+
+        input, button {
+            display: block;
+            width: 100%;
+            max-width: 300px;
+            margin: 10px auto;
+            padding: 10px;
+            font-size: 16px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+        }
+
+        button {
+            background-color: #4a90e2;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #357ab8;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            background-color: #34495e;
+            color: #ecf0f1;
+        }
+
+        th, td {
+            border: 1px solid #555;
+            padding: 10px;
+            text-align: center;
+        }
+
+        th {
+            background-color: #4a90e2;
+        }
+
+        tr:nth-child(even) {
+            background-color: #3b4b59;
+        }
+
+        .result {
+            margin-top: 20px;
+        }
+
+        .table-container {
+            margin-top: 40px;
+        }
+
+        pre {
+            background-color: #3b4b59;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+
+        .example {
+            margin-top: 10px;
+            font-size: 20px;
+            color: #b0c4de;
+        }
+    </style>
+</head>
+<body>
+    <h1>Таблицы конечного поля GF(2^3)</h1>
+
+    <label for="poly">Введите порождающий полином (в двоичном виде):</label>
+    <input id="poly" type="text" value="1101">
+
+    <label for="fieldSize">Размер поля (степень GF(2)): </label>
+    <input id="fieldSize" type="number" value="3">
+
+    <label for="coefficients">Введите коэффициенты многочлена λ(x):</label>
+    <input id="coefficients" type="text" value="3,0,6,0">
+    <div class="example">
+        <strong>Пример:</strong> λ(x) = x³ + (a⁶)x² + x + a³<br>
+        Коэффициенты: <code>3, 0, 6, 0</code>
+    </div>
+
+    <button onclick="generateTable()">Построить таблицу</button>
+    <button onclick="displayPolynomialRoots()">Найти корни</button>
+    <div class="example">
+        <strong>Это вспомогательная штука, не нужно переписывать один в один, <br>некоторые вещи и строки можно не писать</strong>
+    </div>
+
+    <div id="result" class="result"></div>
+    <div id="tableResult" class="table-container"></div>
+
+    <script>
+        function gfMult(a, b, modPoly) {
+            let result = 0;
+            while (b) {
+                if (b & 1) result ^= a;
+                b >>= 1;
+                a <<= 1;
+                if (a & (1 << 3)) a ^= modPoly; // Проверка переполнения степени
+            }
+            return result;
+        }
+
+        function findInTable(x, currTable) {
+            return currTable.indexOf(x);
+        }
+
+        function binChiling(x, length = 3) {
+            return x.toString(2).padStart(length, '0');
+        }
+
+        function korocheLambda(x, modPoly, lambdaCoeffs, index, fullTable) {
+            let gfMultRes = [];
+            let tmpX = 1;
+            let resultLog = `--------------- x = a^${index} --------------\n`;
+
+            for (let i = 0; i < lambdaCoeffs.length; i++) {
+                const tmpRes = gfMult(tmpX, lambdaCoeffs[i], modPoly);
+                const tmpStr = `x^${i} = a^${findInTable(tmpX, fullTable)} * a^${findInTable(lambdaCoeffs[i], fullTable)} = a^${findInTable(tmpRes, fullTable)}`;
+                resultLog += `${tmpStr} || ${binChiling(tmpX)} * ${binChiling(lambdaCoeffs[i])} = 0b${binChiling(tmpRes)}\n`;
+                gfMultRes.push(tmpRes);
+                tmpX = gfMult(tmpX, x, modPoly);
+            }
+
+            let result = gfMultRes.reduce((acc, val) => acc ^ val, 0);
+            resultLog += `Bin res: 0b${binChiling(result)}\n`;
+
+            return { result, log: resultLog };
+        }
+
+        function findRoots(table, modPoly, lambdaCoeffs) {
+            let roots = [];
+            let resultLog = '';
+            for (let x = 0; x < table.length; x++) {
+                const element = table[x];
+                const { result, log } = korocheLambda(element, modPoly, lambdaCoeffs, x, table);
+                resultLog += log;
+                if (result === 0) roots.push(x);
+            }
+            return { roots, log: resultLog };
+        }
+
+        function generateTable() {
+            const polyInput = document.getElementById('poly').value;
+            const fieldSizeInput = parseInt(document.getElementById('fieldSize').value);
+
+            const poly = parseInt(polyInput, 2);
+            const mask = (1 << fieldSizeInput) - 1;
+
+            const table = [];
+            let value = 1;
+            for (let i = 0; i < (1 << fieldSizeInput) - 1; i++) {
+                table.push(value);
+                value = gfMult(value, 2, poly) & mask;
+            }
+
+            displayMainTable(table);
+        }
+
+        function displayMainTable(table) {
+            const tableDiv = document.getElementById('tableResult');
+            tableDiv.innerHTML = '<h2>Таблица значений</h2>';
+
+            const mainTable = document.createElement('table');
+            const headerRow = document.createElement('tr');
+            ['Десятичное значение'].forEach(text => {
+                const th = document.createElement('th');
+                th.textContent = text;
+                headerRow.appendChild(th);
+            });
+            mainTable.appendChild(headerRow);
+
+            table.forEach(el => {
+                const tr = document.createElement('tr');
+                const valueCell = document.createElement('td');
+                valueCell.textContent = el;
+                tr.appendChild(valueCell);
+                mainTable.appendChild(tr);
+            });
+
+            tableDiv.appendChild(mainTable);
+        }
+
+        function displayPolynomialRoots() {
+            const polyInput = document.getElementById('poly').value;
+            const coefficientsInput = document.getElementById('coefficients').value.split(',').map(Number);
+            const fieldSizeInput = parseInt(document.getElementById('fieldSize').value);
+
+            const poly = parseInt(polyInput, 2);
+            const mask = (1 << fieldSizeInput) - 1;
+
+            const table = [];
+            let value = 1;
+            for (let i = 0; i < (1 << fieldSizeInput) - 1; i++) {
+                table.push(value);
+                value = gfMult(value, 2, poly) & mask;
+            }
+            table.push(0);
+
+            const lambdaCoeffs = coefficientsInput.map(index => table[index]);
+            const { roots, log } = findRoots(table, poly, lambdaCoeffs);
+
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = `
+                <h3>Результаты:</h3>
+                <pre>${log}</pre>
+                <p>Корни многочлена λ(x): ${roots.map(root => `a^${root}`).join(', ')}</p>
+            `;
+        }
+    </script>
+</body>
+</html>

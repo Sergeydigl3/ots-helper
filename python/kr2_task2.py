@@ -1,131 +1,106 @@
-from dataclasses import dataclass
+def binchiling(x):
+    return bin(x)[2:].zfill(3)
 
-# Порождающий полином p(x) = x^3 + x^2 + 1 в двоичном виде: 0b1011
-POLY = 0b1101   
+def find_in_table(x, curr_table):
+    for i in range(len(curr_table)):
+        if curr_table[i] == x:
+            return i
+    return -1
 
-GF_SIZE_INIT = 3
-GF_size = 2**GF_SIZE_INIT
-GF_mask = (1 << GF_SIZE_INIT) - 1
-
-# Функция для умножения на x (сдвиг влево) с учетом порождающего полинома
-def multiply_by_x(value):
-    result = value << 1  # Умножение на x (сдвиг влево)
-    if result & (1 << GF_SIZE_INIT):  # Если результат сдвига имеет старший бит (старше x^GF_SIZE_INIT)
-        result ^= POLY  # Применяем XOR с порождающим полиномом
-    return result & GF_mask  # Ограничиваем результат до GF_SIZE_INIT бит
-
-# Функция для преобразования числа в полиномиальное представление
-def to_polynomial(value):
-    binary_repr = bin(value)[2:]  # Преобразование в двоичную строку
-    terms = []
-    for i, bit in enumerate(binary_repr):  # Итерируем от старшего бита к младшему
-        if bit == '1':
-            power = len(binary_repr) - i - 1  # Степень, начиная с самой старшей
-            str_append = f"x^{power}" if power > 0 else "1"
-            if power == 1: str_append = "x"
-            terms.append(str_append)
-    return " + ".join(terms) if terms else "0"
-
-def show_bin(value: int):
-    return bin(value)[2:].zfill(GF_SIZE_INIT)
-
-
-print(f"Исходное полином: {to_polynomial(POLY)}")
-
-@dataclass
-class TableElement:
-    degree_repr: int
-    value: int
-    bin_repr: str
-
-
-table: list[TableElement] = []
-
-table.append(TableElement(0, 0, show_bin(0)))
-table.append(TableElement(1, 1, show_bin(1)))
-for i in range(GF_size - 2):
-    value = multiply_by_x(table[-1].value)
-    degree_repr = table[-1].degree_repr << 1
-    added = TableElement(degree_repr,value, show_bin(value))
-    table.append(added)
-
-# Вывод таблицы с измененным порядком столбцов
-print("\nТаблица значений:")
-print("Степенное представление | Полиномическое представление | Двоичное представление | Десятичное значение")
-print("-" * 55)
-for el in table:
-    print(f"{to_polynomial(el.degree_repr):<30} | {to_polynomial(el.value):<30} | {el.bin_repr} | {el.value}")
-    
-
-# Инициализация таблиц для exp(k) и log(a)
-exp_table = [0] * GF_size
-log_table = [None] * GF_size
-
-# Построение exp(k) и log(a)
-# exp(k) - значение из таблицы, где degree_repr = x^k
-# log(a) - обратный индекс для exp(k)
-for k in range(GF_size - 1):
-    # Найти элемент в первой таблице, где степень соответствует x^k
-    element = next((el for el in table if el.degree_repr == (1 << k)), None)
-    if element:
-        exp_table[k] = element.value  # exp(k) = значение элемента
-        log_table[element.value] = k  # log(value) = k
-
-# Вывод таблицы
-print("\nТаблица экспоненциального и логарифмического представления:")
-print("k   | Exp(k)   | a   | Log(a)")
-print("-" * 30)
-for k in range(GF_size):
-    exp_val = exp_table[k] if k < GF_size - 1 else 1  # exp(k), при k >= GF_size-1 exp(k) = 1
-    log_val = log_table[k] if k < GF_size and log_table[k] is not None else "-Inf"  # log(a)
-    print(f"{k:<4} | {exp_val:<8} | {k:<3} | {log_val}")
-
-
-
-# --------------------------------------------------
-# Проверка, является ли элемент корнем многочлена Lambda(x)
-def evaluate_polynomial(coefficients, x):
-    debug_steps = []  # Для записи шагов вычислений
+def gf_mult(a, b, mod_poly):
+    """
+    Умножение в поле GF(2^3).
+    a, b: множители в двоичном представлении.
+    mod_poly: модуль в двоичном представлении.
+    """
     result = 0
-    for i, coeff in enumerate(coefficients):
-        term = coeff * (x ** i)  # Коэффициент умножается на x^i
-        result ^= term  # Сложение в поле GF(2)
-        debug_steps.append(f"Step {i}: coeff={coeff}, x^{i}={x**i}, term={term}, partial_result={result}")
-    # Лог вычислений
-    print(f"Evaluating polynomial at x={x} ({to_polynomial(x)}):")
-    for step in debug_steps:
-        print("  " + step)
+    while b:
+        if b & 1:
+            result ^= a
+        b >>= 1
+        a <<= 1
+        if a & 0b1000:  # Проверка переполнения степени. (нахардкодили говна)
+            a ^= mod_poly
     return result
 
-# Коэффициенты многочлена Lambda(x) = x^3 + (a^6)*x^2 + x + a^3
-# Поле GF(2^3) задано элементами: 0, a, a^2, ..., a^(GF_size - 2)
-coefficients = [
-    exp_table[3],  # a^3, свободный член
-    1,             # коэффициент при x
-    exp_table[6],  # a^6, коэффициент при x^2
-    1              # коэффициент при x^3
-]
+def koroche_lambda(x, mod_poly, lambda_coeffs, ind, full_table):
+    # Коэффициенты многочлена Lambda(x)
+    gf_mult_res = []
+    tmp_x = 1
+    pred_res=[]
+    machine_res=[]
+    print(f"--------------- x = a^{ind} --------------")
+    for i in range(len(lambda_coeffs)):
+        pow1 = find_in_table(tmp_x, full_table)
+        pow2 = find_in_table(lambda_coeffs[i], full_table)
+        tmp_res = gf_mult(tmp_x, lambda_coeffs[i], mod_poly)
+        tmp_str = f"x^{i} = a^{pow1} * a^{pow2} = a^{find_in_table(tmp_res, full_table)}"
+        tmp_str += f" || {binchiling(tmp_x)} * {binchiling(lambda_coeffs[i])} = 0b{binchiling(tmp_res)}"
+        print(tmp_str)
+        gf_mult_res.append(tmp_res)
+        tmp_x = gf_mult(tmp_x, x, mod_poly)
+        
+        tmp_arr: list[str] = []
+        tmp_machine: list[str] = []
+        if pow1 != 0:
+            tmp_arr.append(f"a^{pow1}")
+            tmp_machine.append(f"{binchiling(tmp_x)}")
+        if pow2 != 0:
+            tmp_arr.append(f"a^{pow2}")
+            tmp_machine.append(f"{binchiling(lambda_coeffs[i])}")
+        tmp_prod = " * ".join(tmp_arr)
+        tmp_prod_machine = " * ".join(tmp_machine)
+        if "*" in tmp_prod:
+            tmp_prod = f"({tmp_prod})"
+            tmp_prod_machine = f"({tmp_prod_machine})"
+            
+        pred_res.append(tmp_prod)
+        machine_res.append(tmp_prod_machine)
 
-# Лог коэффициентов
-print("\nКоэффициенты многочлена Lambda(x):")
-for i, coeff in enumerate(coefficients):
-    print(f"  x^{i}: {to_polynomial(coeff)} (двоичное: {show_bin(coeff)}, десятичное: {coeff})")
 
-roots = []
-for element in range(GF_size):
-    print(f"\nПроверяем элемент: {to_polynomial(element)} (двоичное: {show_bin(element)}, десятичное: {element})")
-    value = evaluate_polynomial(coefficients, element)
-    print(f"  Результат: {value}")
-    if value == 0:
-        print(f"  Найден корень: {to_polynomial(element)}")
-        roots.append(element)
-    else:
-        print(f"  Элемент {to_polynomial(element)} не является корнем.")
+    result = 0
+    for i in range(len(gf_mult_res)):
+        result ^= gf_mult_res[i]
 
-# Вывод корней
-print("\nКорни многочлена Lambda(x):")
-if not roots:
-    print("  Корни не найдены.")
-else:
-    for root in roots:
-        print(f"{to_polynomial(root):<20} | Двоичное: {show_bin(root)} | Десятичное: {root}")
+    print(f"Bin res: 0b{binchiling(result)}")
+    
+    pred_res = reversed(pred_res)
+    machine_res = reversed(machine_res)
+    tmp_prod = " + ".join(pred_res)
+    tmp_prod_machine = " + ".join(machine_res)
+    print(f"λ(a^{ind}) = {tmp_prod} = {tmp_prod_machine} = {binchiling(result)}")
+    return result
+
+def find_roots(table, mod_poly, lambda_coeffs):
+    roots = []
+    for x in range(0, 7):  # Перебираем элементы GF(2^3), кроме 0.
+        element = table[x]
+        result = koroche_lambda(element, mod_poly, lambda_coeffs, x, table)
+        if result == 0:
+            roots.append(x)
+
+    return roots
+
+def main():
+    # Модульное поле GF(2^3) задано многочленом p(x) = x^3 + x^2 + 1
+    mod_poly = 0b1101
+    # Таблица от 1 до a^6
+    table = [1, 2, 4, 5, 7, 3, 6, 0]
+    #table = [1, 2, 4, 3, 6, 7, 5, 0]
+    # Lambda(x) = x^3 + (a^6)*x^2 + x + a^3
+    # Коэффициенты многочлена Lambda(x)
+    lambda_coef_indexes = [3, 0, 6, 0]
+
+    lambda_coeffs = []
+    for i in range(len(lambda_coef_indexes)):
+        lambda_coeffs.append(table[lambda_coef_indexes[i]])
+
+    roots = find_roots(table, mod_poly, lambda_coeffs)
+    powers = []
+    for i in range(len(table)):
+        powers.append(f"a^{i}")
+
+    print("Корни многочлена Lambda(x):", [powers[root] for root in roots])
+
+if __name__ == "__main__":
+    main()

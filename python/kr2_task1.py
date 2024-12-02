@@ -1,7 +1,8 @@
 from dataclasses import dataclass
 
 # Порождающий полином p(x) = x^3 + x^2 + 1 в двоичном виде: 0b1011
-POLY = 0b1101   
+# POLY = 0b1101   
+POLY = 0b1011   
 
 GF_SIZE_INIT = 3
 GF_size = 2**GF_SIZE_INIT
@@ -80,3 +81,6 @@ for k in range(GF_size):
     exp_val = exp_table[k] if k < GF_size - 1 else 1  # exp(k), при k >= GF_size-1 exp(k) = 1
     log_val = log_table[k] if k < GF_size and log_table[k] is not None else "-Inf"  # log(a)
     print(f"{k:<4} | {exp_val:<8} | {k:<3} | {log_val}")
+ 
+clear_array = [i.value for i in table][1:]
+print(f"Clear array: {clear_array}")
