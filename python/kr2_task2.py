@@ -35,10 +35,11 @@ def koroche_lambda(x, mod_poly, lambda_coeffs, ind, full_table):
         pow2 = find_in_table(lambda_coeffs[i], full_table)
         tmp_res = gf_mult(tmp_x, lambda_coeffs[i], mod_poly)
         tmp_str = f"x^{i} = a^{pow1} * a^{pow2} = a^{find_in_table(tmp_res, full_table)}"
-        tmp_str += f" || {binchiling(tmp_x)} * {binchiling(lambda_coeffs[i])} = 0b{binchiling(tmp_res)}"
-        print(tmp_str)
-        gf_mult_res.append(tmp_res)
-        tmp_x = gf_mult(tmp_x, x, mod_poly)
+        ebaniy_binchilin = binchiling(lambda_coeffs[i])
+        tmp_str += f" || {binchiling(tmp_x)} * {ebaniy_binchilin} = 0b{binchiling(tmp_res)}"
+        if 7 not in [pow1, pow2]:
+            print(tmp_str)
+            
         
         tmp_arr: list[str] = []
         tmp_machine: list[str] = []
@@ -47,22 +48,30 @@ def koroche_lambda(x, mod_poly, lambda_coeffs, ind, full_table):
             tmp_machine.append(f"{binchiling(tmp_x)}")
         if pow2 != 0:
             tmp_arr.append(f"a^{pow2}")
-            tmp_machine.append(f"{binchiling(lambda_coeffs[i])}")
+            tmp_machine.append(f"{ebaniy_binchilin}")
         tmp_prod = " * ".join(tmp_arr)
         tmp_prod_machine = " * ".join(tmp_machine)
         if "*" in tmp_prod:
             tmp_prod = f"({tmp_prod})"
             tmp_prod_machine = f"({tmp_prod_machine})"
+    
+        if len(tmp_prod) == 0:
+            tmp_prod = "1"
+            tmp_prod_machine = "001"
+        
+        if 7 not in [pow1, pow2]:
+            pred_res.append(tmp_prod)
+            machine_res.append(tmp_prod_machine)
             
-        pred_res.append(tmp_prod)
-        machine_res.append(tmp_prod_machine)
+        gf_mult_res.append(tmp_res)
+        tmp_x = gf_mult(tmp_x, x, mod_poly)
 
 
     result = 0
     for i in range(len(gf_mult_res)):
         result ^= gf_mult_res[i]
 
-    print(f"Bin res: 0b{binchiling(result)}")
+    # print(f"Bin res: 0b{binchiling(result)}")
     
     pred_res = reversed(pred_res)
     machine_res = reversed(machine_res)
@@ -83,13 +92,15 @@ def find_roots(table, mod_poly, lambda_coeffs):
 
 def main():
     # Модульное поле GF(2^3) задано многочленом p(x) = x^3 + x^2 + 1
-    mod_poly = 0b1101
+    # mod_poly = 0b1101
+    mod_poly = 0b1011
     # Таблица от 1 до a^6
-    table = [1, 2, 4, 5, 7, 3, 6, 0]
-    #table = [1, 2, 4, 3, 6, 7, 5, 0]
+    # table = [1, 2, 4, 5, 7, 3, 6, 0]
+    table = [1, 2, 4, 3, 6, 7, 5, 0]
     # Lambda(x) = x^3 + (a^6)*x^2 + x + a^3
     # Коэффициенты многочлена Lambda(x)
-    lambda_coef_indexes = [3, 0, 6, 0]
+    # lambda_coef_indexes = [3, 0, 6, 0]
+    lambda_coef_indexes = [0, 7, 0, 0]
 
     lambda_coeffs = []
     for i in range(len(lambda_coef_indexes)):
